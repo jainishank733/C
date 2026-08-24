@@ -1,0 +1,491 @@
+CREATE OR REPLACE EDITIONABLE TRIGGER "FCIPAYROLL"."T_PAY_EMP_PF_DTL1" after insert or update/* or delete*/ /*of
+EMPLOYEE_SUBS, ADV_REFUND, EXTRA_VPF, PF_ARREAR, BONUS_TO_PF, WID_REFUND,emp_num,From_year,EMPLOYER_CONT,EPS,FPS*/ on FCIPAYROLL.pay_emp_pf_dtl
+for each row
+-- Trigger created for updating Pay_emp_pf_hdr
+-- Created by - Rajeev Sharma
+-- Creation Date - 2-Apr-2013
+-- t_pay_emp_pf_dtl1.trg Version 1.1 Date 26-Apr-2013
+Declare
+  V_cnt           Number := 0;
+  V_old_year      Number := 0;
+  V_old_ee_close  Number := 0;
+  V_old_er_close  Number := 0;
+  V_old_vpf_close Number := 0;
+  new_yr_cnt      Number := 0;
+begin
+  DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] ENTRY: emp_num=' || :New.emp_num || ', from_year=' || :New.from_year || ', Inserting=' || case when Inserting then 'Y' else 'N' end || ', Updating=' || case when Updating then 'Y' else 'N' end);
+  ----------------------------------------------------------------------------------
+  -- First it is checked whether the Parent record exist from mentioned from Year in Pay_emp_pf_hdr or not
+  -- If it do not exist then one record is inserted.
+  -- done in Version 1.1
+  -----------------------------------------------------------------------------------
+  Begin
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: checking existing pay_emp_pf_hdr row for emp_num=' || :New.emp_num || ', from_year=' || :New.from_year);
+    select count(1)
+      into V_cnt
+      from pay_emp_pf_hdr
+     where emp_num = :New.emp_num
+       and from_year = :New.from_year;
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] VALUE: V_cnt=' || V_cnt);
+  Exception
+    When Others then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' - defaulting V_cnt to 0');
+      V_cnt := 0;
+  end;
+
+  Begin
+    V_old_year := 1;
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: selecting prior-year close balances from pay_emp_pf_hdr for emp_num=' || :New.emp_num || ', from_year=' || (:New.from_year - 1));
+    select EMPLOYEE_PF_CLOSE_BAL, EMPLOYER_PF_CLOSE_BAL, VPF_CLOSE_BAL
+      into V_old_ee_close, V_old_er_close, V_old_vpf_close
+      from pay_emp_pf_hdr
+     where emp_num = :New.emp_num
+       and from_year = :New.from_year - 1;
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] VALUE: V_old_ee_close=' || V_old_ee_close || ', V_old_er_close=' || V_old_er_close || ', V_old_vpf_close=' || V_old_vpf_close);
+  Exception
+    when others then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' - setting V_old_year to 0');
+      V_old_year := 0;
+  end;
+
+  If V_cnt = 0 then
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: V_cnt = 0 -> no existing pay_emp_pf_hdr row for this from_year');
+    if V_old_year = 1 then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: V_old_year = 1 -> inserting new pay_emp_pf_hdr row using prior-year close balances');
+      Begin
+        Insert into pay_emp_pf_hdr
+          (EMP_NUM,
+           FROM_YEAR,
+           TO_YEAR,
+           EMPLOYEE_PF_OPEN_BAL,
+           EMPLOYER_PF_OPEN_BAL,
+           USER_ID_CREATED,
+           CREATED_SITE_ID,
+           CREATED_TIME_STAMP,
+           AQ_PROCESSED,
+           VPF_OPEN_BAL)
+        Values
+          (:New.emp_num,
+           :New.from_year,
+           :New.From_Year + 1,
+           V_old_ee_close,
+           V_old_er_close,
+           0,
+           0,
+           sysdate,
+           'N',
+           V_old_vpf_close);
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: insert into pay_emp_pf_hdr (prior-year path) completed for emp_num=' || :New.emp_num);
+      Exception
+        when others then
+          DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' on insert (prior-year path)');
+          Raise_Application_Error(-20001,
+                                  'Error while inserting new year Record in PF Header for Employee Number ' ||
+                                  to_char(:New.emp_Num));
+      end;
+    elsif V_old_year = 0 then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: V_old_year = 0 -> inserting new pay_emp_pf_hdr row with zero opening balances');
+      Begin
+        Insert into pay_emp_pf_hdr
+          (EMP_NUM,
+           FROM_YEAR,
+           TO_YEAR,
+           EMPLOYEE_PF_OPEN_BAL,
+           EMPLOYER_PF_OPEN_BAL,
+           USER_ID_CREATED,
+           CREATED_SITE_ID,
+           CREATED_TIME_STAMP,
+           AQ_PROCESSED,
+           VPF_OPEN_BAL)
+        Values
+          (:New.emp_num,
+           :New.from_year,
+           :New.From_Year + 1,
+           0,
+           0,
+           0,
+           0,
+           sysdate,
+           'N',
+           0);
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: insert into pay_emp_pf_hdr (zero-balance path) completed for emp_num=' || :New.emp_num);
+      Exception
+        when others then
+          DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' on insert (zero-balance path)');
+          Raise_Application_Error(-20001,
+                                  'Error while inserting new year Record in PF Header for Employee Number ' ||
+                                  to_char(:New.emp_Num));
+      end;
+    end if;
+  end if;
+  -----------------------------------------------------------------------------------
+  -- Check next fiscal year row is there or not
+  begin
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: checking next fiscal year row for emp_num=' || :New.emp_num || ', from_year=' || (:New.from_year + 1));
+    select count(1)
+      into new_yr_cnt
+      from pay_emp_pf_hdr
+     where emp_num = :New.emp_num
+       and from_year = (:New.from_year + 1);
+    DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] VALUE: new_yr_cnt=' || new_yr_cnt);
+  Exception
+    When Others then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' - defaulting new_yr_cnt to 0');
+      new_yr_cnt := 0;
+  end;
+
+  -----------------------------------------------------------------------------------
+  Begin
+    -----------------------------------------------------------------------------------
+    --PF_arrear column contains values but is also included in EMPLOYEE_SUBS so should not be used for summary
+    -- 1. Header.EMPLOYEE_SUBS_TRANS_IN_AMT = dtl.EMPLOYEE_SUBS + dtl.ADV_REFUND + dtl.EXTRA_VPF
+    --                                     dtl.BONUS_TO_PF + dtl.WID_REFUND
+    -- 2. Header.EMPLOYER_CONT_TRANS_IN_AMT = dtl.EMPLOYER_CONT
+    -- 3. Header.VPF_TRANS_IN_AMT = dtl.VPF
+
+    -- 4. Header.EMPLOYEE_SUBS_TRANS_OUT_AMT = dtl.ADV_TAKEN +dtl.Amount Withdrawn
+    --                                    +Sanc.Final Payments (done by other trigger
+    -- 5. Header.EMPLOYER_CONT_TRANS_OUT_AMT = dtl.AMT_WITHDRAWN_EMPLR
+    --                                    +Sanc.Final Payments (done by other trigger
+    -- 6. Header.VPF_TRANS_OUT_AMT = dtl.ADV_TAKEN_VPF +dtl.AMT_WITHDRAWN_VPF
+    --                                    +Sanc.Final Payments (done by other trigger
+    
+    
+    
+    -- adding code fix for correcting the hdr table columns records
+    
+    IF :NEW.FROM_YEAR = :OLD.FROM_YEAR
+   AND :NEW.EMP_NUM = :OLD.EMP_NUM
+   AND V_CNT = 1
+THEN
+   
+   UPDATE FCIPAYROLL.PAY_EMP_PF_HDR H
+    SET
+    EMPLOYEE_SUBS_TRANS_IN_AMT =
+        NVL((SELECT SUM(NVL(D.EMPLOYEE_SUBS,0))
+               + SUM(NVL(D.ADV_REFUND,0))
+               + SUM(NVL(D.BONUS_TO_PF,0))
+               + SUM(NVL(D.WID_REFUND,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0),
+
+    EMPLOYER_CONT_TRANS_IN_AMT =
+        NVL((SELECT SUM(NVL(D.EMPLOYER_CONT,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0),
+
+    VPF_TRANS_IN_AMT =
+        NVL((SELECT SUM(NVL(D.VPF,0))
+                 + SUM(NVL(D.EXTRA_VPF,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0),
+
+    EMPLOYEE_SUBS_TRANS_OUT_AMT =
+        NVL((SELECT SUM(NVL(D.ADV_TAKEN,0))
+                 + SUM(NVL(D.AMT_WITHDRAWN,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0),
+
+    EMPLOYER_CONT_TRANS_OUT_AMT =
+        NVL((SELECT SUM(NVL(D.AMT_WITHDRAWN_EMPLR,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0),
+
+    VPF_TRANS_OUT_AMT =
+        NVL((SELECT SUM(NVL(D.ADV_TAKEN_VPF,0))
+                 + SUM(NVL(D.AMT_WITHDRAWN_VPF,0))
+             FROM FCIPAYROLL.PAY_EMP_PF_DTL D
+            WHERE D.FROM_YEAR = H.FROM_YEAR
+              AND D.EMP_NUM   = H.EMP_NUM), 0)
+              
+    WHERE H.EMP_NUM   = :NEW.EMP_NUM
+    AND H.FROM_YEAR = :NEW.FROM_YEAR;
+   
+    END IF;
+        
+
+    If Inserting then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: Inserting -> updating pay_emp_pf_hdr trans in/out amounts (add) for emp_num=' || :NEW.EMP_NUM || ', from_year=' || :NEW.FROM_YEAR);
+
+      update fcipayroll.pay_emp_pf_hdr
+         set EMPLOYEE_SUBS_TRANS_IN_AMT  = nvl(EMPLOYEE_SUBS_TRANS_IN_AMT, 0) +
+                                           nvl(:NEW.EMPLOYEE_SUBS, 0) +
+                                           nvl(:NEW.ADV_REFUND, 0) + /*nvl(:NEW.PF_ARREAR,0)+*/
+                                           nvl(:NEW.BONUS_TO_PF, 0) +
+                                           nvl(:NEW.WID_REFUND, 0),
+             EMPLOYER_CONT_TRANS_IN_AMT  = nvl(EMPLOYER_CONT_TRANS_IN_AMT, 0) +
+                                           nvl(:NEW.EMPLOYER_CONT, 0) /*+   nvl(:NEW.EPS,0)+nvl(:NEW.FPS,0)*/,
+             VPF_TRANS_IN_AMT            = nvl(VPF_TRANS_IN_AMT, 0) +
+                                           nvl(:NEW.VPF, 0) +
+                                           nvl(:NEW.EXTRA_VPF, 0),
+             EMPLOYEE_SUBS_TRANS_OUT_AMT = nvl(EMPLOYEE_SUBS_TRANS_OUT_AMT,
+                                               0) + nvl(:NEW.ADV_TAKEN, 0) +
+                                           nvl(:NEW.AMT_WITHDRAWN, 0),
+             EMPLOYER_CONT_TRANS_OUT_AMT = nvl(EMPLOYER_CONT_TRANS_OUT_AMT,
+                                               0) +
+                                           nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0),
+             VPF_TRANS_OUT_AMT           = nvl(VPF_TRANS_OUT_AMT, 0) +
+                                           nvl(:NEW.ADV_TAKEN_VPF, 0) +
+                                           nvl(:NEW.AMT_WITHDRAWN_VPF, 0)
+       where emp_num = :NEW.EMP_NUM
+         and From_year = :NEW.FROM_YEAR;
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: update pay_emp_pf_hdr (insert path, current year) completed, rows=' || SQL%ROWCOUNT);
+
+      ------------------------------------
+      if new_yr_cnt <> 0 then
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: new_yr_cnt <> 0 (insert path) -> calling insert_into_temp_tbl for emp_num=' || :NEW.EMP_NUM);
+        begin
+
+          insert_into_temp_tbl(:NEW.EMP_NUM,
+                               nvl(:NEW.EMPLOYEE_SUBS, 0) +
+                               nvl(:NEW.ADV_REFUND, 0) +
+                               nvl(:NEW.BONUS_TO_PF, 0) +
+                               nvl(:NEW.WID_REFUND, 0) -
+                               nvl(:NEW.ADV_TAKEN, 0) -
+                               nvl(:NEW.AMT_WITHDRAWN, 0),
+                               nvl(:NEW.EMPLOYER_CONT, 0) -
+                               nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0),
+                               nvl(:NEW.VPF, 0) + nvl(:NEW.EXTRA_VPF, 0) -
+                               nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                               nvl(:NEW.AMT_WITHDRAWN_VPF, 0),
+                               :NEW.FROM_YEAR);
+          DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: insert_into_temp_tbl call (insert path) completed');
+        end;
+      end if;
+      ------
+
+    elsif updating then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: updating -> reversing OLD amounts on pay_emp_pf_hdr for emp_num=' || :OLD.EMP_NUM || ', from_year=' || :OLD.FROM_YEAR);
+      -- raise_application_error(-20017,new_yr_cnt);
+      update fcipayroll.pay_emp_pf_hdr
+         set EMPLOYEE_SUBS_TRANS_IN_AMT  = nvl(EMPLOYEE_SUBS_TRANS_IN_AMT, 0) -
+                                           (nvl(:OLD.EMPLOYEE_SUBS, 0) +
+                                            nvl(:OLD.ADV_REFUND, 0) + /*nvl(:OLD.PF_ARREAR,0)+*/
+                                            nvl(:OLD.BONUS_TO_PF, 0) +
+                                            nvl(:OLD.WID_REFUND, 0)),
+             EMPLOYER_CONT_TRANS_IN_AMT  = nvl(EMPLOYER_CONT_TRANS_IN_AMT, 0) -
+                                           (nvl(:OLD.EMPLOYER_CONT, 0) /*+nvl(:OLD.EPS,0)+nvl(:OLD.FPS,0)*/),
+
+             VPF_TRANS_IN_AMT            = (nvl(VPF_TRANS_IN_AMT, 0)- nvl(:OLD.EXTRA_VPF, 0)- nvl(:OLD.VPF, 0)) + (nvl(:NEW.VPF, 0) +
+                                           nvl(:NEW.EXTRA_VPF, 0)),
+
+             EMPLOYEE_SUBS_TRANS_OUT_AMT = nvl(EMPLOYEE_SUBS_TRANS_OUT_AMT,
+                                               0) -
+                                           (nvl(:OLD.ADV_TAKEN, 0) +
+                                            nvl(:OLD.AMT_WITHDRAWN, 0)),
+             EMPLOYER_CONT_TRANS_OUT_AMT = nvl(EMPLOYER_CONT_TRANS_OUT_AMT,
+                                               0) -
+                                           nvl(:OLD.AMT_WITHDRAWN_EMPLR, 0),
+             VPF_TRANS_OUT_AMT           = nvl(VPF_TRANS_OUT_AMT, 0) -
+                                           (nvl(:OLD.ADV_TAKEN_VPF, 0) +
+                                            nvl(:OLD.AMT_WITHDRAWN_VPF, 0))
+       where emp_num = :OLD.EMP_NUM
+         and From_year = :OLD.FROM_YEAR;
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: update pay_emp_pf_hdr (reverse OLD amounts) completed, rows=' || SQL%ROWCOUNT);
+
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: applying NEW amounts on pay_emp_pf_hdr for emp_num=' || :NEW.EMP_NUM || ', from_year=' || :NEW.FROM_YEAR);
+      update fcipayroll.pay_emp_pf_hdr
+         set EMPLOYEE_SUBS_TRANS_IN_AMT  = nvl(EMPLOYEE_SUBS_TRANS_IN_AMT, 0) +
+                                           (nvl(:NEW.EMPLOYEE_SUBS, 0) +
+                                            nvl(:NEW.ADV_REFUND, 0) + /*nvl(:NEW.PF_ARREAR,0)+*/
+                                            nvl(:NEW.BONUS_TO_PF, 0) +
+                                            nvl(:NEW.WID_REFUND, 0)),
+             EMPLOYER_CONT_TRANS_IN_AMT  = nvl(EMPLOYER_CONT_TRANS_IN_AMT, 0) +
+                                           (nvl(:NEW.EMPLOYER_CONT, 0) /*+nvl(:NEW.EPS,0)+nvl(:NEW.FPS,0)*/),
+            /* VPF_TRANS_IN_AMT            = nvl(VPF_TRANS_IN_AMT, 0) +
+                                           nvl(:NEW.VPF, 0) +
+                                           nvl(:NEW.EXTRA_VPF, 0),*/
+             EMPLOYEE_SUBS_TRANS_OUT_AMT = nvl(EMPLOYEE_SUBS_TRANS_OUT_AMT,
+                                               0) + nvl(:NEW.ADV_TAKEN, 0) +
+                                           nvl(:NEW.AMT_WITHDRAWN, 0),
+             EMPLOYER_CONT_TRANS_OUT_AMT = nvl(EMPLOYER_CONT_TRANS_OUT_AMT,
+                                               0) +
+                                           nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0),
+             VPF_TRANS_OUT_AMT           = nvl(VPF_TRANS_OUT_AMT, 0) +
+                                           nvl(:NEW.ADV_TAKEN_VPF, 0) +
+                                           nvl(:NEW.AMT_WITHDRAWN_VPF, 0)
+       where emp_num = :NEW.EMP_NUM
+         and From_year = :NEW.FROM_YEAR;
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: update pay_emp_pf_hdr (apply NEW amounts) completed, rows=' || SQL%ROWCOUNT);
+
+      ------------------------------------
+      -- raise_application_error(-20017,new_yr_cnt);
+      if new_yr_cnt <> 0 then
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: new_yr_cnt <> 0 (updating path) -> calling insert_into_temp_tbl for emp_num=' || :NEW.EMP_NUM);
+
+        begin
+
+          insert_into_temp_tbl(:NEW.EMP_NUM,
+                               (nvl(:NEW.EMPLOYEE_SUBS, 0) -
+                               nvl(:OLD.EMPLOYEE_SUBS, 0)) +
+                               (nvl(:NEW.ADV_REFUND, 0) -
+                               nvl(:OLD.ADV_REFUND, 0)) +
+                               (nvl(:NEW.BONUS_TO_PF, 0) -
+                               nvl(:OLD.BONUS_TO_PF, 0)) +
+                               (nvl(:NEW.WID_REFUND, 0) -
+                               nvl(:OLD.WID_REFUND, 0)) -
+                               (nvl(:NEW.ADV_TAKEN, 0) -
+                               nvl(:OLD.ADV_TAKEN, 0)) -
+                               (nvl(:NEW.AMT_WITHDRAWN, 0) -
+                               nvl(:OLD.AMT_WITHDRAWN, 0)),
+                               (nvl(:NEW.EMPLOYER_CONT, 0) -
+                               nvl(:OLD.EMPLOYER_CONT, 0)) -
+                               (nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0) -
+                               nvl(:OLD.AMT_WITHDRAWN_EMPLR, 0)),
+                               (nvl(:NEW.VPF, 0) - nvl(:OLD.VPF, 0)) +
+                               (nvl(:NEW.EXTRA_VPF, 0) -
+                               nvl(:OLD.EXTRA_VPF, 0)) -
+                               (nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                               nvl(:OLD.ADV_TAKEN_VPF, 0)) -
+                               (nvl(:NEW.AMT_WITHDRAWN_VPF, 0) -
+                               nvl(:OLD.AMT_WITHDRAWN_VPF, 0)),
+                               :NEW.FROM_YEAR);
+          DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] STEP: insert_into_temp_tbl call (updating path) completed');
+
+        end;
+      end if;
+
+      --
+      /*elsif deleting then
+      update fcipayroll.pay_emp_pf_hdr set EMPLOYEE_SUBS_TRANS_IN_AMT=nvl(EMPLOYEE_SUBS_TRANS_IN_AMT,0)-(nvl(:OLD.EMPLOYEE_SUBS,0)+
+      nvl(:OLD.ADV_REFUND,0)+nvl(:OLD.EXTRA_VPF,0)+/*nvl(:OLD.PF_ARREAR,0)+nvl(:OLD.BONUS_TO_PF,0)+ nvl(:OLD.WID_REFUND,0)),
+      EMPLOYER_CONT_TRANS_IN_AMT=nvl(EMPLOYER_CONT_TRANS_IN_AMT,0)-(nvl(:OLD.EMPLOYER_CONT,0)+nvl(:OLD.EPS,0)+nvl(:OLD.FPS,0)),
+      VPF_TRANS_IN_AMT=nvl(VPF_TRANS_IN_AMT,0)-nvl(:OLD.VPF,0),
+      EMPLOYEE_SUBS_TRANS_OUT_AMT=nvl(EMPLOYEE_SUBS_TRANS_OUT_AMT,0)-(nvl(:OLD.ADV_TAKEN,0)+nvl(:OLD.AMT_WITHDRAWN,0)),
+      EMPLOYER_CONT_TRANS_OUT_AMT=nvl(EMPLOYER_CONT_TRANS_OUT_AMT,0)-nvl(:OLD.AMT_WITHDRAWN_EMPLR,0),
+      VPF_TRANS_OUT_AMT=nvl(VPF_TRANS_OUT_AMT,0)-(nvl(:OLD.ADV_TAKEN_VPF,0)+nvl(:OLD.AMT_WITHDRAWN_VPF,0))
+      where emp_num=:OLD.EMP_NUM and From_year=:OLD.FROM_YEAR;*/
+    end if;
+  exception
+    when others then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXCEPTION: ' || SQLERRM || ' (trans-amount update block)');
+      Raise_application_error(-20010,
+                              substr(sqlerrm, 1, 150) ||
+                              'Error in Updating EMPLOYEE_SUBS_TRANS_IN_AMT in PAY_EMP_PF_HDR');
+      -----------------------------------------------------------------------------------
+  End;
+  --============================================================================
+  -- Check next fiscal year row is there or not
+  begin
+
+    if new_yr_cnt <> 0 then
+      DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: new_yr_cnt <> 0 -> propagating balances to future-year pay_emp_pf_hdr rows for emp_num=' || :NEW.EMP_NUM);
+      If Inserting then
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: Inserting -> adding to future-year open/close balances for emp_num=' || :NEW.EMP_NUM);
+        update fcipayroll.pay_emp_pf_hdr
+           set employee_pf_open_bal  = nvl(employee_pf_open_bal, 0) +
+                                       nvl(:NEW.EMPLOYEE_SUBS, 0) +
+                                       nvl(:NEW.ADV_REFUND, 0) +
+                                       nvl(:NEW.BONUS_TO_PF, 0) +
+                                       nvl(:NEW.WID_REFUND, 0) -
+                                       nvl(:NEW.ADV_TAKEN, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN, 0),
+               employee_pf_close_bal = nvl(employee_pf_close_bal, 0) +
+                                       nvl(:NEW.EMPLOYEE_SUBS, 0) +
+                                       nvl(:NEW.ADV_REFUND, 0) +
+                                       nvl(:NEW.BONUS_TO_PF, 0) +
+                                       nvl(:NEW.WID_REFUND, 0) -
+                                       nvl(:NEW.ADV_TAKEN, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN, 0),
+               employer_pf_open_bal  = nvl(employer_pf_open_bal, 0) +
+                                       nvl(:NEW.EMPLOYER_CONT, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0),
+               employer_pf_close_bal = nvl(employer_pf_close_bal, 0) +
+                                       nvl(:NEW.EMPLOYER_CONT, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0),
+               vpf_open_bal          = nvl(vpf_open_bal, 0) +
+                                       nvl(:NEW.VPF, 0) +
+                                       nvl(:NEW.EXTRA_VPF, 0) -
+                                       nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN_VPF, 0),
+               vpf_close_bal         = nvl(vpf_close_bal, 0) +
+                                       nvl(:NEW.VPF, 0) +
+                                       nvl(:NEW.EXTRA_VPF, 0) -
+                                       nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                                       nvl(:NEW.AMT_WITHDRAWN_VPF, 0)
+         where emp_num = :NEW.EMP_NUM
+           and From_year >= (:NEW.FROM_YEAR + 1);
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: update pay_emp_pf_hdr (future years, insert path) completed, rows=' || SQL%ROWCOUNT);
+        --------------------
+      elsif updating then
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] BRANCH: updating -> applying NEW-OLD delta to future-year open/close balances for emp_num=' || :NEW.EMP_NUM);
+
+        update fcipayroll.pay_emp_pf_hdr
+           set employee_pf_open_bal  = nvl(employee_pf_open_bal, 0) +
+                                       (nvl(:NEW.EMPLOYEE_SUBS, 0) -
+                                        nvl(:OLD.EMPLOYEE_SUBS, 0)) +
+                                       (nvl(:NEW.ADV_REFUND, 0) -
+                                        nvl(:OLD.ADV_REFUND, 0)) +
+                                       (nvl(:NEW.BONUS_TO_PF, 0) -
+                                        nvl(:OLD.BONUS_TO_PF, 0)) +
+                                       (nvl(:NEW.WID_REFUND, 0) -
+                                        nvl(:OLD.WID_REFUND, 0)) -
+                                       (nvl(:NEW.ADV_TAKEN, 0) -
+                                        nvl(:OLD.ADV_TAKEN, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN, 0)),
+               employee_pf_close_bal = nvl(employee_pf_close_bal, 0) +
+                                       (nvl(:NEW.EMPLOYEE_SUBS, 0) -
+                                        nvl(:OLD.EMPLOYEE_SUBS, 0)) +
+                                       (nvl(:NEW.ADV_REFUND, 0) -
+                                        nvl(:OLD.ADV_REFUND, 0)) +
+                                       (nvl(:NEW.BONUS_TO_PF, 0) -
+                                        nvl(:OLD.BONUS_TO_PF, 0)) +
+                                       (nvl(:NEW.WID_REFUND, 0) -
+                                        nvl(:OLD.WID_REFUND, 0)) -
+                                       (nvl(:NEW.ADV_TAKEN, 0) -
+                                        nvl(:OLD.ADV_TAKEN, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN, 0)),
+               employer_pf_open_bal  = nvl(employer_pf_open_bal, 0) +
+                                       (nvl(:NEW.EMPLOYER_CONT, 0) -
+                                        nvl(:OLD.EMPLOYER_CONT, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN_EMPLR, 0)),
+               employer_pf_close_bal = nvl(employer_pf_close_bal, 0) +
+                                       (nvl(:NEW.EMPLOYER_CONT, 0) -
+                                        nvl(:OLD.EMPLOYER_CONT, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN_EMPLR, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN_EMPLR, 0)),
+               vpf_open_bal          = nvl(vpf_open_bal, 0) +
+                                       (nvl(:NEW.VPF, 0) - nvl(:OLD.VPF, 0)) +
+                                       (nvl(:NEW.EXTRA_VPF, 0) -
+                                        nvl(:OLD.EXTRA_VPF, 0)) -
+                                       (nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                                        nvl(:OLD.ADV_TAKEN_VPF, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN_VPF, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN_VPF, 0)),
+               vpf_close_bal         = nvl(vpf_close_bal, 0) +
+                                       (nvl(:NEW.VPF, 0) - nvl(:OLD.VPF, 0)) +
+                                       (nvl(:NEW.EXTRA_VPF, 0) -
+                                        nvl(:OLD.EXTRA_VPF, 0)) -
+                                       (nvl(:NEW.ADV_TAKEN_VPF, 0) -
+                                        nvl(:OLD.ADV_TAKEN_VPF, 0)) -
+                                       (nvl(:NEW.AMT_WITHDRAWN_VPF, 0) -
+                                        nvl(:OLD.AMT_WITHDRAWN_VPF, 0))
+         where emp_num = :NEW.EMP_NUM
+           and From_year >= (:NEW.FROM_YEAR + 1);
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: update pay_emp_pf_hdr (future years, updating path) completed, rows=' || SQL%ROWCOUNT);
+		
+		
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: '|| ' :NEW.EMPLOYEE_SUBS= '|| :NEW.EMPLOYEE_SUBS );
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: '|| ' :OLD.EMPLOYEE_SUBS= '|| :OLD.EMPLOYEE_SUBS );
+        
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: '|| ' :NEW.EMPLOYER_CONT= '|| :NEW.EMPLOYER_CONT );
+        DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] DML: '|| ' :OLD.EMPLOYER_CONT= '|| :OLD.EMPLOYER_CONT );
+        
+		
+      end if;
+    end IF;
+  end;
+  DBMS_OUTPUT.PUT_LINE('[T_PAY_EMP_PF_DTL1] EXIT: trigger complete for emp_num=' || :New.emp_num);
+end;
+
+
+
+Could you please provide me the ocrrect and practixal solution in my case. You can go through fcipayroll schema attached in the file. Please give me correct and non hallucinated solution for this case.  
