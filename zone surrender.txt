@@ -1,0 +1,87 @@
+select sur.emp_num emp_num,
+       (mast.emp_first_name || ' ' || mast.emp_middle_name || ' ' ||
+       mast.emp_last_name) emp_name,
+       mast.father_name,
+       mast.emp_birth_date,
+       mast.comp_joining_date,
+       fcipayroll.pkg_Payroll_utility_fci.get_loc_desc(sur.pres_posting) pres_loc,
+       mast.retirement_date retirement_date,
+      cgd.code_desc  cadre,
+       mast.last_promotion_date,
+       mast.transfer_date,
+       mast.bank_ac_no,
+       mast.bank_code,
+       substr( mast.Branch_code,instr( mast.Branch_code, '#',1)+1,(instr( mast.Branch_code, '#',1,2)-instr( mast.Branch_code, '#',1))-1) Branch_code,
+       decode(sur.emp_category,
+              'EMPCTGRY$I',
+              'I',
+              'EMPCTGRY$II',
+              'II',
+              'EMPCTGRY$III',
+              'III',
+              'EMPCTGRY$IV',
+              'IV',
+              'EMPCTGRY$DPSL',
+              'DPS',
+              'EMPCTGRY$DPTL',
+              'Departmental') emp_category,
+       fcipayroll.pkg_Payroll_utility_fci.get_loc_desc(zone_from) zone_from,
+       fcipayroll.pkg_Payroll_utility_fci.get_loc_desc(zone_to) zone_to,
+       sur.old_fps_num,
+       sur.old_cpf_code,
+       sur.new_cpf_no,
+       sur.new_eps_no,
+       dsgn.dsgn_desc dsgn,
+       sur.pres_posting pres_loc,
+       sur.reason,
+       sur.request_date,
+       sur.approval_date,
+       sur.approval_status,
+       sur.employee_subscription emp_subs,
+       sur.employer_contribution emplr_cont,
+       sur.eps_contribution eps,
+       sur.vpf,
+       sur.employee_ob emp_ob,
+       sur.employer_ob emplr_ob,
+       sur.vpf_ob,
+       sur.employee_cb emp_cb,
+       sur.employer_cb emplr_cb,
+       sur.vpf_cb,
+       cpf_aprv.user_id_modified app_id,
+       sur.adv_refund,
+       sur.int_adv,
+       sur.emp_adjustment,
+       sur.emplr_adjustment,
+       sur.vpf_adjustment,
+       sur.emp_amt_withdrawn emp_deduction,
+       sur.emplr_amt_withdrawn emplr_deduction,
+       sur.vpf_amt_withdrawn vpf_deduction,
+       sur.temp_adv_with,
+       sur.part_final_with
+  from fcipayroll.pay_emp_zone_surrender sur,
+       fcipayroll.pay_dsgn_mst           dsgn,
+       fcipayroll.pay_emp_mast           mast,
+       fcipayroll.pay_emp_cpf_approve    cpf_aprv,
+       fcipayroll.com_gbl_dtl cgd
+ where zone_to in nvl(:zone_to, zone_to)
+   and sur.emp_num = mast.emp_num
+   and sur.designation_id = dsgn.dsgn_id
+   and cpf_aprv.cpf_approve_id =sur.cpf_approve_id
+    and mast.cadre = cgd.gbl_code
+   and zone_from in nvl(:zone_frm, zone_from)
+   and request_date between :from_date and :to_date
+   and approval_status = :approve_status;
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
