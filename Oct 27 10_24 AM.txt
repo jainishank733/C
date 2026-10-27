@@ -1,0 +1,413 @@
+
+-- Q_EMP_INFO
+
+SELECT ALL pdm.DSGN_DESC,
+           pem.PAY_SCALE_TYPE,
+pem.uan,
+           initcap(pem.EMP_FIRST_NAME || ' ' ||
+                   pem.EMP_MIDDLE_NAME || ' ' ||
+                   pem.EMP_LAST_NAME) NAME,
+           pem.BANK_AC_NO,
+           pem.CPF_CODE,
+           pem.PAY_SCALE_CODE,
+           pem.EMP_NUM,
+           pem.EMP_NUM EMP_NUMBER,
+           TO_CHAR(TO_DATE(:P_YYMM, 'YYYYMM'), 'MON,YYYY') MDATE,
+           clm.LOC_DESC,
+              (select invoice_num
+          from pay_invoice_salary
+         where yymm = :P_YYMM
+           and pay_code = 999
+           and emp_num=psmd.emp_num
+           and rownum=1) invoice_num,
+           clm.STATE,
+           pem.STAFF_CODE,
+           psm.SECTION,
+           pem.EMP_LBR,
+           DECODE(pem.EMP_LBR,
+                  'D',
+                  DECODE(pdm.DSGN_DESC,
+                         'Sardar',
+                         (SELECT pdar.MGW_SARDAR
+                            FROM PAY_DPS_ASOR_RATES pdar
+                           WHERE pdar.EFF_END_DATE IS NULL),
+                         'Mandal',
+                         (SELECT pdar.MGW_MANDAL
+                            FROM PAY_DPS_ASOR_RATES pdar
+                           WHERE pdar.EFF_END_DATE IS NULL),
+                         'Handling Labour',
+                         (SELECT pdar.MGW_HANDLBR
+                            FROM PAY_DPS_ASOR_RATES pdar
+                           WHERE pdar.EFF_END_DATE IS NULL),
+                         'Anchillary Labour',
+                         (SELECT pdar.MGW_ANCHLBR
+                            FROM PAY_DPS_ASOR_RATES pdar
+                           WHERE pdar.EFF_END_DATE IS NULL)),
+                  psmd.BASIC) BASIC,
+           pem.GRADE_PAY GRADE_PAY,
+           pdm.dsgn_id,
+           peym.ytm_gross_erng,
+           peym.ytm_taxable_erng,
+           --peym.ytm_it_paid,
+           --   peym.YTM_CPF,
+           psmd.Employee_Pf_Bal,
+           pem.emp_pan_no,
+           pem.emp_birth_date,
+           pem.retirement_date,
+           (pkg_lbr_compute_inct.func_getLbrMonthWorkDays(nvl(:P_EMP_NUM,
+                                                              pem.emp_num),
+                                                          :P_YYMM)) NO_OF_DAYS,
+           cgd.code_desc Cadre,
+           
+           pem.fps_num,
+           pem.pran_no,
+pem.addon_pay
+
+  FROM PAY_DSGN_MST pdm,
+       PAY_EMP_MAST pem,
+       COM_LOC_MST clm,
+       com_gbl_dtl cgd,
+       PAY_SECTION_MST psm,
+       PAY_EMP_YTM_MAST peym,
+       PAY_SLIP_MISC_DATA psmd
+ WHERE cgd.gbl_code(+) = pem.cadre
+   and pem.EMP_NUM = NVL(:P_EMP_NUM, psmd.EMP_NUM)
+   AND psmd.EMP_NUM = NVL(:P_EMP_NUM, psmd.EMP_NUM) --ADDED BY MANDEEP ON 2 AUG 2011
+   AND pdm.DSGN_ID(+) = pem.DESIGNATION_ID
+   AND clm.LOC_ID(+) = :p_LOCATION_CODE                                -- done by Ankur as to display location_code's desc
+ --  and a.emp_num(+) = pem.EMP_NUM
+   AND psm.SECTION_ID(+) = pem.SECTION_ID
+   AND peym.EMP_NUM(+) = pem.EMP_NUM
+   AND peym.FIN_YYMM(+) =
+       PAYROLL_PKG.Func_GetFinYear(TO_DATE(:P_YYMM || '01', 'YYYYMMDD'))
+   AND psmd.YYMM = :P_YYMM --ADDED BY MANDEEP ON 2 AUG 2011
+   AND pem.EMP_LBR = :P_Emp_Flg
+ 
+   and exists (select i.emp_num                   -- to make report static , added by Ankur on 21/10/2013
+          from pay_image i
+         where i.emp_num = pem.emp_num
+    and i.created_site_id = (SELECT DECODE((SELECT LOC_TYPE_GBL
+                                FROM COM_LOC_MST
+                               WHERE LOC_ID = :P_LOCATION_CODE),
+                              'DP',
+                              PARENT_LOC_ID,
+                              LOC_ID)
+                  FROM COM_LOC_MST
+                 WHERE LOC_ID = :P_LOCATION_CODE)    /* :p_LOCATION_CODE     */ 
+           and i.yymm = :P_YYMM);
+
+
+
+
+
+
+
+
+
+-- Q_earning_emp_num
+
+SELECT ALL
+     PAY_IMAGE.EMP_NUM, 
+     sum(PAY_IMAGE.TXN_AMT) TXN_AMT,
+    DECODE(:EMP_LBR,'E',PAY_CODES.PAY_CODE_DESC,DECODE(PAY_IMAGE.PAY_CODE,100,'Pay',PAY_CODES.PAY_CODE_DESC))  "PAY_CODE_DESC"
+FROM
+    PAY_IMAGE, 
+    PAY_CODES
+WHERE
+    (PAY_IMAGE.YYMM = :P_YYMM
+    AND (PAY_IMAGE.PAY_MODE = 1
+    /*  OR PAY_IMAGE.PAY_MODE = 4    */ )
+   AND PAY_IMAGE.PAY_CODE NOT IN (902,903,911,912,917,952,997,910,954,909,959))
+  AND (PAY_IMAGE.PAY_CODE = PAY_CODES.PAY_CODE)
+GROUP BY 
+     PAY_IMAGE.EMP_NUM,  PAY_CODES.PAY_CODE_DESC,PAY_IMAGE.PAY_CODE
+ORDER BY PAY_IMAGE.PAY_CODE;
+
+
+
+
+
+
+
+
+-- Q_NET_PAY
+
+SELECT txn_amt Net_Payment, emp_num
+  FROM PAY_IMAGE
+ WHERE emp_num=:emp_number 
+  AND YYMM = :P_YYMM
+--   AND PAY_MODE IN (1, 2)
+   AND FOR_YYMM = :P_YYMM
+   AND PAY_CODE = 999
+--   GROUP BY emp_num
+
+
+
+
+
+
+
+
+-- Q_Deduction
+
+SELECT ALL
+       PAY_CODES.PAY_CODE_DESC,
+       sum(PAY_IMAGE.TXN_AMT) TXN_AMT,
+       PAY_IMAGE.EMP_NUM,
+       AGENCY_CODE,AGENCY_SITE_CODE,PAY_IMAGE.PAY_CODE
+FROM 
+     PAY_CODES, PAY_IMAGE
+WHERE (
+     PAY_IMAGE.YYMM = :P_YYMM
+    AND (PAY_IMAGE.PAY_MODE = 2
+  /* OR PAY_IMAGE.PAY_MODE = 5  */ )
+   AND PAY_IMAGE.PAY_CODE<>998
+   AND PAY_IMAGE.PAY_CODE<>952
+   AND PAY_IMAGE.PAY_CODE<>902
+   AND PAY_IMAGE.PAY_CODE<>903
+   AND PAY_IMAGE.PAY_CODE<>911
+   AND PAY_IMAGE.PAY_CODE<>917
+   AND PAY_IMAGE.PAY_CODE<>912
+   AND PAY_IMAGE.PAY_CODE<>910
+AND PAY_IMAGE.PAY_CODE<>909
+AND PAY_IMAGE.PAY_CODE<>959
+  AND PAY_IMAGE.PAY_CODE<>954)  
+  AND (PAY_CODES.PAY_CODE = PAY_IMAGE.PAY_CODE) 
+GROUP BY 
+     PAY_IMAGE.EMP_NUM,  PAY_CODES.PAY_CODE_DESC,AGENCY_CODE,AGENCY_SITE_CODE,PAY_IMAGE.PAY_CODE
+ORDER BY PAY_IMAGE.PAY_CODE
+
+
+
+
+
+
+-- Q3_G_EMP_NUM
+
+select plmb.emp_num,
+       plmb.paid_instal,
+       plmb.total_instal,
+       pc.pay_code_desc CODE_DESC_ADV
+ from PAY_LOAN_MTHLY_BAL PLMB, pay_codes pc
+ where pc.pay_code = PLMB.pay_code
+ AND PLMB.PAY_CODE BETWEEN 60 AND 80
+ AND PLMB.EMP_NUM=:EMP_NUM4--:P_EMP_NUM
+ AND plmb.yymm = :P_YYMM
+
+
+
+
+
+--Q1_GPAY_CODE
+
+
+select plmb.emp_num,
+       plmb.paid_instal,
+       plmb.total_instal,
+       plmb.num_principal_instls,
+       plmb.num_interest_instls,PLMB.PAY_CODE,
+       pc.pay_code_desc
+  from pay_loan_mthly_bal plmb, pay_codes pc
+   where pc.pay_code = plmb.PAY_CODE
+ AND PLMB.PAY_CODE BETWEEN 81 AND 99
+   and plmb.emp_num = :emp_num4
+   and plmb.yymm = :P_YYMM
+
+
+
+
+
+
+
+
+-- Q2 G_AGENCY_CODE
+
+select PSAD.emp_num,
+       PSAD.PAID_INSTALL OTHER_PAID_INST,
+       PSAD.NO_OF_INST OTHER_NO_OF_INST,
+       pc.pay_code_desc OTHER_DESC,
+       PSAD.AGENCY_CODE,PSAD.AGENCY_SITE_CODE,PSAD.PAY_CODE
+  from PAY_SLIP_ARREAR_DATA PSAD, pay_codes pc
+   where pc.pay_code = PSAD.PAY_CODE
+   and PSAD.emp_num = :EMP_NUM4--:p_emp_num
+   and PSAD.yymm = :P_YYMM
+
+
+
+
+
+
+
+
+
+-- Q_ARR_EARN
+
+SELECT ALL
+     PAY_IMAGE.EMP_NUM, 
+     sum(PAY_IMAGE.TXN_AMT) ARR_EARN_AMT,
+    DECODE(:EMP_LBR,'E',PAY_CODES.PAY_CODE_DESC,DECODE(PAY_IMAGE.PAY_CODE,100,'Pay',PAY_CODES.PAY_CODE_DESC))  AS ARR_EARN_DESC
+FROM
+    PAY_IMAGE, 
+    PAY_CODES
+WHERE
+    (PAY_IMAGE.YYMM = :P_YYMM
+    AND (PAY_IMAGE.PAY_MODE = 4)
+   AND PAY_IMAGE.PAY_CODE NOT IN (902,903,911,912,917,952,997,910,954,909,959))
+  AND (PAY_IMAGE.PAY_CODE = PAY_CODES.PAY_CODE)
+GROUP BY 
+     PAY_IMAGE.EMP_NUM,  PAY_CODES.PAY_CODE_DESC,PAY_IMAGE.PAY_CODE
+ORDER BY PAY_IMAGE.PAY_CODE 
+
+
+
+
+
+
+
+
+
+
+-- Q4_EMP_NUM8
+
+SELECT K.EMP_NUM,
+       K.YYMM,
+       NVL(K.TOTAL_TAXABLE_EARNING, 0) PRJ_TAXABLE_ERNG,
+       NVL(K.TOTAL_ACTUAL_EARNING, 0) ytm_gross_erng,
+       NVL(k.TOTAL_INCOME_TAX_ROUNDED, 0) PRJ_INCOME_TAX,
+       NVL(K.TAX_ALREADY_PAID, 0) YTM_TDS,
+     
+       NVL((select ABS(sum(actual_amount))
+             from pay_it_earnings_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+                 
+              and PAY_CODE =307),
+           0) YTM_PROF_TAX,
+       NVL((select ABS(sum(actual_amount))
+             from pay_it_earnings_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+                 
+              and PAY_CODE =516),
+           0) YTM_CPF,
+       NVL((select ABS(sum(actual_amount))
+             from pay_it_earnings_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+                 
+              and PAY_CODE =503),
+           0) ytm_vpf,
+       
+       NVL((select sum(amount)
+             from pay_it_section_rebate_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+              and it_sec = parent_sec
+              and parent_sec = '10(14)(II)(5)'),
+           0) trnsprt_exmpt,
+       
+       NVL((select sum(amount)
+             from pay_it_section_rebate_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+              and it_sec = parent_sec
+              and parent_sec = '10(13(A)'),
+           0) ANNUAL_HRR,
+       
+       NVL((select sum(amount)
+             from pay_it_section_rebate_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+              and it_sec = parent_sec
+              and parent_sec in( select section_code from pay_it_section_mst where section_code like '80%')),
+           0) ANNUAL_80_REBATE,
+       NVL((select sum(amount)
+             from pay_it_section_rebate_details
+            where emp_num = :EMP_NUM4
+              and yymm = :P_YYMM
+              and it_sec = parent_sec
+              and parent_sec = '24'),
+           0) DEDN_24
+  FROM pay_it_forecast_summary K
+ WHERE K.EMP_NUM = :EMP_NUM4
+   AND K.YYMM = :P_YYMM
+   AND NVL(K.ROW_FROM,'S')='S'
+
+
+
+
+
+
+
+
+-- Q_ARR_DED EMP_NUM1
+
+
+
+SELECT ALL
+       PAY_CODES.PAY_CODE_DESC ARR_DED_DESC ,
+       sum(PAY_IMAGE.TXN_AMT) ARR_DED_AMT ,
+       PAY_IMAGE.EMP_NUM,
+       AGENCY_CODE,AGENCY_SITE_CODE,PAY_IMAGE.PAY_CODE
+FROM 
+     PAY_CODES, PAY_IMAGE
+WHERE (
+     PAY_IMAGE.YYMM = :P_YYMM
+    AND (PAY_IMAGE.PAY_MODE = 5)
+   AND PAY_IMAGE.PAY_CODE<>998
+   AND PAY_IMAGE.PAY_CODE<>952
+   AND PAY_IMAGE.PAY_CODE<>902
+   AND PAY_IMAGE.PAY_CODE<>903
+   AND PAY_IMAGE.PAY_CODE<>911
+   AND PAY_IMAGE.PAY_CODE<>917
+   AND PAY_IMAGE.PAY_CODE<>912
+   AND PAY_IMAGE.PAY_CODE<>910
+AND PAY_IMAGE.PAY_CODE<>909
+AND PAY_IMAGE.PAY_CODE<>959
+  AND PAY_IMAGE.PAY_CODE<>954)  
+  AND (PAY_CODES.PAY_CODE = PAY_IMAGE.PAY_CODE) 
+GROUP BY 
+     PAY_IMAGE.EMP_NUM,  PAY_CODES.PAY_CODE_DESC,AGENCY_CODE,AGENCY_SITE_CODE,PAY_IMAGE.PAY_CODE
+ORDER BY PAY_IMAGE.PAY_CODE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
