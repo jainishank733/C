@@ -1,0 +1,134 @@
+(video, objectType) => {
+  // 1. Block any channel with YouTube's official Music Note (Artist) badge
+  if (video.channelBadges && video.channelBadges.includes("artist")) {
+    return true;
+  }
+
+  // 2. Block YouTube auto-generated "Mix" playlists
+  if (objectType === "mix" || objectType === "playlist") {
+    if (video.title && video.title.toLowerCase().includes("mix")) {
+      return true;
+    }
+  }
+
+  // 3. Block by title keywords
+  const musicKeywords = [
+    "song", "songs", "music", "audio", "lyric", "lyrics", "lyrical",
+    "mv", "music video", "official video", "full video", "video song",
+    "remix", "mashup", "lofi", "lo-fi", "slowed", "reverb", "unplugged",
+    "cover", "acoustic", "instrumental", "karaoke", "bgm", "ringtone",
+    "album", "ep", "single", "track", "ost", "soundtrack", "theme song",
+    "jukebox", "playlist", "nonstop", "non-stop", "medley",
+    "singer", "feat", "ft.", "ft ", "concert", "live performance",
+    "dj", "edm", "rap", "hip hop", "hip-hop", "pop", "rock", "jazz",
+    "gaana", "gaane", "gane", "geet", "sangeet", "bhajan", "qawwali",
+    "ghazal", "shabad", "kirtan", "aarti", "mantra", "chalisa",
+    "bollywood", "punjabi", "haryanvi", "bhojpuri", "tamil", "telugu",
+    "coke studio", "mtv unplugged", "t-series", "zee music",
+    "sony music", "tips official", "yrf", "saregama", "speed records"
+  ];
+
+  // --- NEW ADDITION: Film Industry & Entertainment Title Keywords ---
+  const entertainmentTitleKeywords = [
+    // Film Industries
+    "bollywood", "hollywood", "tollywood", "kollywood", "mollywood", "sandalwood",
+    "pollywood", "bhojpuri", "marathi", "gujarati", "bengali", "south movie",
+    "hindi dubbed", "dubbed movie", "film industry", "cinema",
+
+    // Movies, Trailers & Clips
+    "movie", "movies", "film", "films", "trailer", "teaser", "first look",
+    "motion poster", "glimpse", "box office", "blockbuster", "superhit",
+    "full movie", "movie scene", "climax", "deleted scene", "behind the scenes", "bts",
+
+    // TV, OTT & Web Series
+    "web series", "episode", "full episode", "promo", "serial", "natak",
+    "netflix", "prime video", "hotstar", "jiocinema", "sonyliv", "zee5", "mx player",
+
+    // General Entertainment, Comedy & Celebrity
+    "entertainment", "comedy", "funny", "prank", "roast", "sketch", "spoof", "parody",
+    "stand up", "standup", "kapil sharma", "bigg boss", "reality show", "audition",
+    "celebrity", "celebs", "actor", "actress", "paparazzi", "spotted", "red carpet",
+    "interview", "gossip", "bollywood news", "film review", "movie review", "vlog"
+  ];
+
+  if (video.title) {
+    const titleLower = video.title.toLowerCase();
+    if (musicKeywords.some(keyword => titleLower.includes(keyword))) {
+      return true;
+    }
+    // Check new entertainment & film keywords
+    if (entertainmentTitleKeywords.some(keyword => titleLower.includes(keyword))) {
+      return true;
+    }
+  }
+
+  // 4. Block by channel name
+  if (video.channelName) {
+    const channelLower = video.channelName.toLowerCase();
+    const musicChannels = [
+      " - topic", "vevo", "records", "music", 
+      "t-series", "saregama", "tips", "yrf", "sony", "zee"
+    ];
+
+    // --- NEW ADDITION: Film Studios, TV Networks & Entertainment Channels ---
+    const entertainmentChannels = [
+      "entertainment", "films", "movies", "studios", "pictures", "production", "productions",
+      "cinema", "telefilms", "talkies", "motion pictures", "box office",
+      "dharma", "red chillies", "balaji", "eros", "viacom18", "pen movies", "goldmines",
+      "shemaroo", "ultra", "rajshri", "excel entertainment", "maddock", "geetha arts",
+      "mythri", "hombale", "lyca", "sun tv", "star plus", "colors", "sab tv", "set india",
+      "mtv", "zoom", "pinkvilla", "bollywood hungama", "filmfare", "koimoi", "imdb",
+      "warner bros", "universal", "paramount", "disney", "marvel", "dc", "lionsgate",
+      "netflix", "amazon prime", "hotstar", "comedy", "vines", "tvf", "ashish chanchlani",
+      "bb ki vines", "carryminati", "harsh beniwal", "round2hell"
+    ];
+
+    if (musicChannels.some(ch => channelLower.includes(ch))) {
+      return true;
+    }
+    // Check new entertainment & film channels
+    if (entertainmentChannels.some(ch => channelLower.includes(ch))) {
+      return true;
+    }
+  }
+
+  // --- NEW ADDITION: Superheroes, Franchises, Action Scenes & Dubbed Clips ---
+  const franchiseAndSceneKeywords = [
+    // Marvel & Avengers
+    "avenger", "avengers", "marvel", "mcu", "iron man", "ironman", "thor", "hulk",
+    "captain america", "spider-man", "spiderman", "black widow", "hawkeye",
+    "doctor strange", "black panther", "thanos", "loki", "deadpool", "wolverine",
+    "x-men", "guardians of the galaxy", "ant-man", "wanda", "scarlet witch",
+    "endgame", "infinity war", "age of ultron", "civil war",
+
+    // DC & Other Major Franchises
+    "batman", "superman", "justice league", "joker", "wonder woman", "aquaman",
+    "flash", "harry potter", "star wars", "fast and furious", "fast & furious",
+    "john wick", "transformers", "jurassic", "mission impossible", "james bond",
+    "avatar", "bahubali", "baahubali", "kgf", "pushpa", "rrr", "kalki", "pathaan", "jawan",
+
+    // Scene & Dubbing Markers (Catches clips without the word "movie")
+    "scene", "scenes", "fight", "battle", "vs", "entry", "mass entry", "attitude",
+    "status", "whatsapp status", "shorts", "clip", "clips", "cut",
+    "in hindi", "hindi dub", "dubbed", "4k", "hd scene", "imax", "best moment", "epic moment"
+  ];
+
+  if (video.title) {
+    const titleLower = video.title.toLowerCase();
+    if (franchiseAndSceneKeywords.some(keyword => titleLower.includes(keyword))) {
+      return true;
+    }
+  }
+
+  if (video.channelName) {
+    const channelLower = video.channelName.toLowerCase();
+    const clipChannels = [
+      "scene", "clips", "dubbed", "hindi", "status", "edits", "editz", "marvel", "avenger"
+    ];
+    if (clipChannels.some(ch => channelLower.includes(ch))) {
+      return true;
+    }
+  }
+
+  return false;
+}
